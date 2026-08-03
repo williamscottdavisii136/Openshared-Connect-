@@ -1,0 +1,38 @@
+# Openshared Connect Bridge Configuration
+# This file defines the two-account bridge connection between:
+#   williamscottdavisii136  <-->  Billydeeii136
+
+bridge:
+  name: "Openshared-Connect"
+  description: >
+    A bidirectional bridge that allows two GitHub accounts to communicate,
+    collaborate, and access each other's repositories through shared tunnels.
+
+  accounts:
+    primary:
+      username: williamscottdavisii136
+      role: primary
+    secondary:
+      username: Billydeeii136
+      role: secondary
+
+  tunnels:
+    - name: "tunnel-A"
+      direction: "williamscottdavisii136 -> Billydeeii136"
+      type: "repository-sync"
+    - name: "tunnel-B"
+      direction: "Billydeeii136 -> williamscottdavisii136"
+      type: "repository-sync"
+
+  collaboration:
+    cross_repo_access: true
+    sync_issues: true
+    sync_pull_requests: false
+    allow_read: true
+    allow_write: false          # write access must be explicitly granted via GitHub settings
+
+  repositories:
+    # List repositories from each account to share across the bridge
+    williamscottdavisii136:
+      - Openshared-Connect-
+    Billydeeii136: []             # add repository names from Billydeeii136 here

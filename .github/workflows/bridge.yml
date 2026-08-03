@@ -1,0 +1,103 @@
+name: Account Bridge – Cross-Account Collaboration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:        # allow manual trigger from the Actions tab
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # Job 1: Validate the bridge configuration file on every push/PR
+  # ──────────────────────────────────────────────────────────────────
+  validate-bridge-config:
+    name: Validate bridge-config.yml
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Lint bridge-config.yml
+        run: yamllint bridge-config.yml
+
+      - name: Print bridge summary
+        run: |
+          echo "=== Openshared-Connect Bridge Summary ==="
+          echo "Primary account  : williamscottdavisii136"
+          echo "Secondary account: Billydeeii136"
+          echo "Tunnel A: williamscottdavisii136 → Billydeeii136"
+          echo "Tunnel B: Billydeeii136 → williamscottdavisii136"
+          echo "Bridge status    : ACTIVE"
+
+  # ──────────────────────────────────────────────────────────────────
+  # Job 2: Cross-account collaboration notification
+  #   Sends a repository_dispatch event to the secondary account's
+  #   repository when this repo is updated.
+  #
+  #   Prerequisites (set once in repo Settings → Secrets):
+  #     BRIDGE_TOKEN  – a GitHub PAT (classic) owned by
+  #                     williamscottdavisii136 with repo scope,
+  #                     added as a collaborator on Billydeeii136's
+  #                     target repository.
+  # ──────────────────────────────────────────────────────────────────
+  notify-secondary-account:
+    name: Notify Billydeeii136 via bridge tunnel
+    runs-on: ubuntu-latest
+    needs: validate-bridge-config
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Send bridge event to secondary account
+        env:
+          BRIDGE_TOKEN: ${{ secrets.BRIDGE_TOKEN }}
+        run: |
+          if [ -z "${BRIDGE_TOKEN}" ]; then
+            echo "BRIDGE_TOKEN secret not set – skipping cross-account notification."
+            echo "To enable: add a PAT as BRIDGE_TOKEN in repository secrets."
+            exit 0
+          fi
+
+          HTTP_CODE=$(curl -s -o /tmp/bridge_response.txt -w "%{http_code}" \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${BRIDGE_TOKEN}" \
+            https://api.github.com/repos/Billydeeii136/Openshared-Connect-/dispatches \
+            -d '{"event_type":"bridge-update","client_payload":{"source":"williamscottdavisii136","repo":"Openshared-Connect-","ref":"'"$GITHUB_SHA"'"}}')
+
+          echo "HTTP status: ${HTTP_CODE}"
+          cat /tmp/bridge_response.txt || true
+
+          if [[ "${HTTP_CODE}" -lt 200 || "${HTTP_CODE}" -ge 300 ]]; then
+            echo "ERROR: Bridge dispatch failed with HTTP ${HTTP_CODE}"
+            exit 1
+          fi
+
+          echo "Bridge event dispatched to Billydeeii136/Openshared-Connect-"
+
+  # ──────────────────────────────────────────────────────────────────
+  # Job 3: Accept incoming bridge events from the secondary account
+  #   Triggered by a repository_dispatch with event_type "bridge-update"
+  # ──────────────────────────────────────────────────────────────────
+  receive-bridge-event:
+    name: Receive bridge event from secondary account
+    runs-on: ubuntu-latest
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'bridge-update'
+    steps:
+      - name: Log incoming bridge event
+        run: |
+          echo "=== Incoming Bridge Event ==="
+          echo "Source account : ${{ github.event.client_payload.source }}"
+          echo "Source repo    : ${{ github.event.client_payload.repo }}"
+          echo "Source ref     : ${{ github.event.client_payload.ref }}"
+          echo "Bridge tunnel  : Billydeeii136 → williamscottdavisii136 (tunnel-B)"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: React to bridge event
+        run: |
+          echo "Bridge event received and acknowledged."
+          echo "Both tunnels are operational – connection established."
